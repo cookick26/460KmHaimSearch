@@ -45,8 +45,13 @@ pcall(function() ScreenGui.Parent = CoreGui end)
 if not ScreenGui.Parent then ScreenGui.Parent = LocalPlayer:WaitForChild("PlayerGui") end
 
 local Frame = Instance.new("Frame")
-Frame.Size = UDim2.new(0, 220, 0, 140) -- 슬라이더 추가로 높이 확장
-Frame.Position = UDim2.new(0, 20, 0, 40)
+Frame.Size = UDim2.new(0, 220, 0, 140)
+
+-- [추가] UI의 중심점을 정중앙(0.5, 0.5)으로 설정합니다.
+Frame.AnchorPoint = Vector2.new(0.5, 0.5) 
+
+-- [수정] 화면 전체 가로(X)의 50%, 세로(Y)의 50% 위치(즉, 정중앙)에 배치합니다.
+Frame.Position = UDim2.new(0.5, 0, 0.5, 0)
 Frame.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
 Frame.BorderSizePixel = 0
 Frame.Active = true
