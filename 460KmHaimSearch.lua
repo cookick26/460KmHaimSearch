@@ -7,27 +7,151 @@ task.spawn(function()
     end
 end)
 
--- 2. 에임봇 스크립트 설정 및 실행
 local Players = game:GetService("Players")
 local UserInputService = game:GetService("UserInputService")
 local RunService = game:GetService("RunService")
+local CoreGui = game:GetService("CoreGui")
 local Camera = workspace.CurrentCamera
 local LocalPlayer = Players.LocalPlayer
 
--- 설정 (Configuration)
-local FOV_RADIUS = 55
-local SMOOTHNESS = 10 -- 부드러움 조절 (값이 크면 빠르게 고정되지만 에임이 튈 수 있음)
-local AIM_KEY = Enum.KeyCode.P
+-- 실시간 설정 변수
+local Settings = {
+    FOV = 55,
+    MULTIPLIER = 12, -- 초기 속도 배수 (첫 번째 코드와 동일)
+    Enabled = true,
+    AimKey = Enum.KeyCode.P,
+    ToggleKey = Enum.KeyCode.Insert
+}
 
--- 가장 가까운 대상을 찾는 함수
+local UiVisible = true -- 초기 UI 상태 (켜짐)
+
+----------------------------------------------------------------                
+-- 1. FOV 시각화 원(Drawing) 설정
+----------------------------------------------------------------
+local FovCircle = Drawing.new("Circle")
+FovCircle.Color = Color3.fromRGB(105, 12, 12)
+FovCircle.Thickness = 3
+FovCircle.NumSides = 64
+FovCircle.Filled = false
+FovCircle.Transparency = 0.5
+FovCircle.Visible = UiVisible
+
+----------------------------------------------------------------                
+-- 2. GUI 생성 (FOV 및 에임 강도 조절용 UI)
+----------------------------------------------------------------
+local ScreenGui = Instance.new("ScreenGui")
+ScreenGui.Name = "AimSettingsUI"
+pcall(function() ScreenGui.Parent = CoreGui end)
+if not ScreenGui.Parent then ScreenGui.Parent = LocalPlayer:WaitForChild("PlayerGui") end
+
+local Frame = Instance.new("Frame")
+Frame.Size = UDim2.new(0, 220, 0, 140) -- 슬라이더 추가로 높이 확장
+Frame.Position = UDim2.new(0, 20, 0, 40)
+Frame.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+Frame.BorderSizePixel = 0
+Frame.Active = true
+Frame.Draggable = true 
+Frame.Visible = UiVisible
+Frame.Parent = ScreenGui
+
+local Corner = Instance.new("UICorner")
+Corner.CornerRadius = UDim.new(0, 8)
+Corner.Parent = Frame
+
+local Title = Instance.new("TextLabel")
+Title.Size = UDim2.new(1, 0, 0, 30)
+Title.Text = " Cookick Hub "
+Title.TextColor3 = Color3.fromRGB(105, 12, 12)
+Title.BackgroundTransparency = 1
+Title.TextXAlignment = Enum.TextXAlignment.Center
+Title.Font = Enum.Font.SourceSansBold
+Title.TextSize = 16
+Title.Parent = Frame
+
+-- 공통 슬라이더 생성 함수
+local function createSlider(text, min, max, default, posY, callback)
+    local label = Instance.new("TextLabel")
+    label.Size = UDim2.new(1, -20, 0, 20)
+    label.Position = UDim2.new(0, 10, 0, posY)
+    label.Text = text .. " : " .. tostring(default)
+    label.TextColor3 = Color3.fromRGB(105, 12, 12)
+    label.BackgroundTransparency = 1
+    label.TextXAlignment = Enum.TextXAlignment.Left
+    label.Font = Enum.Font.SourceSans
+    label.TextSize = 16
+    label.Parent = Frame
+
+    local sliderBg = Instance.new("Frame")
+    sliderBg.Size = UDim2.new(1, -20, 0, 8)
+    sliderBg.Position = UDim2.new(0, 10, 0, posY + 22)
+    sliderBg.BackgroundColor3 = Color3.fromRGB(60, 60, 60)
+    sliderBg.BorderSizePixel = 0
+    sliderBg.Parent = Frame
+
+    local sliderBtn = Instance.new("TextButton")
+    sliderBtn.Size = UDim2.new(0, 16, 0, 16)
+    sliderBtn.AnchorPoint = Vector2.new(0.5, 0.5)
+    sliderBtn.Position = UDim2.new((default - min) / (max - min), 0, 0.5, 0)
+    sliderBtn.BackgroundColor3 = Color3.fromRGB(0, 150, 255)
+    sliderBtn.Text = ""
+    sliderBtn.Parent = sliderBg
+
+    local btnCorner = Instance.new("UICorner")
+    btnCorner.CornerRadius = UDim.new(1, 0)
+    btnCorner.Parent = sliderBtn
+
+    local dragging = false
+    sliderBtn.MouseButton1Down:Connect(function() dragging = true end)
+    
+    UserInputService.InputEnded:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 then dragging = false end
+    end)
+
+    RunService.RenderStepped:Connect(function()
+        if dragging and UiVisible then
+            local mouseX = UserInputService:GetMouseLocation().X
+            local relativeX = mouseX - sliderBg.AbsolutePosition.X
+            local percent = math.clamp(relativeX / sliderBg.AbsoluteSize.X, 0, 1)
+            sliderBtn.Position = UDim2.new(percent, 0, 0.5, 0)
+            
+            local value = math.floor(min + (percent * (max - min)))
+            label.Text = text .. " : " .. tostring(value)
+            callback(value)
+        end
+    end)
+end
+
+-- 1. FOV 슬라이더 생성 (위치 Y: 35)
+createSlider("FOV SIZE", 10, 300, Settings.FOV, 35, function(val)
+    Settings.FOV = val
+end)
+
+-- 2. [신규] MULTIPLIER 슬라이더 생성 (위치 Y: 85, 범위 1 ~ 20)
+createSlider("AIMLOCK", 1, 20, Settings.MULTIPLIER, 85, function(val)
+    Settings.MULTIPLIER = val
+end)
+
+----------------------------------------------------------------                
+-- 3. Insert 키 입력 감지 (UI & FOV 토글)
+----------------------------------------------------------------
+UserInputService.InputBegan:Connect(function(input, gameProcessed)
+    if not gameProcessed and input.KeyCode == Settings.ToggleKey then
+        UiVisible = not UiVisible
+        Frame.Visible = UiVisible       
+        FovCircle.Visible = UiVisible   
+    end
+end)
+
+----------------------------------------------------------------                
+-- 4. 에임봇 로직
+----------------------------------------------------------------
 local function getClosest()
     local target = nil
-    local shortestDist = FOV_RADIUS
+    local shortestDist = Settings.FOV 
     local mousePos = UserInputService:GetMouseLocation()
 
     for _, p in pairs(Players:GetPlayers()) do
         if p ~= LocalPlayer and p.Character then
-            -- 휴머노이드(체력) 및 헤드(또는 몸통) 확인
             local hum = p.Character:FindFirstChildOfClass("Humanoid")
             local head = p.Character:FindFirstChild("Head") or p.Character:FindFirstChild("UpperTorso")
             
@@ -37,7 +161,7 @@ local function getClosest()
                     local dist = (Vector2.new(pos.X, pos.Y) - mousePos).Magnitude
                     if dist < shortestDist then
                         shortestDist = dist
-                        target = pos -- 화면상의 좌표 저장
+                        target = pos
                     end
                 end
             end
@@ -46,18 +170,19 @@ local function getClosest()
     return target
 end
 
--- 프레임마다 마우스 커서를 타겟으로 부드럽게 이동시키는 루프
 RunService.RenderStepped:Connect(function()
-    if UserInputService:IsKeyDown(AIM_KEY) then
+    local mousePos = UserInputService:GetMouseLocation()
+    
+    FovCircle.Position = mousePos
+    FovCircle.Radius = Settings.FOV
+    
+    if UserInputService:IsKeyDown(Settings.AimKey) then
         local targetPos = getClosest()
         if targetPos then
-            local mousePos = UserInputService:GetMouseLocation()
+            -- 실시간으로 바뀐 Settings.MULTIPLIER 배수가 적용됩니다.
+            local diffX = (targetPos.X - mousePos.X) * Settings.MULTIPLIER
+            local diffY = (targetPos.Y - mousePos.Y) * Settings.MULTIPLIER
             
-            -- 현재 마우스 위치와 타겟 위치의 차이를 계산하여 SMOOTHNESS 비율만큼 이동
-            local diffX = (targetPos.X - mousePos.X) * SMOOTHNESS
-            local diffY = (targetPos.Y - mousePos.Y) * SMOOTHNESS
-            
-            -- 마우스 커서 위치 업데이트
             mousemoverel(diffX, diffY)
         end
     end
