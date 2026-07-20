@@ -8,10 +8,11 @@ local LocalPlayer = Players.LocalPlayer
 -- 실시간 설정 변수
 local Settings = {
     FOV = 55,
-    MULTIPLIER = 12, -- 초기 속도 배수 (첫 번째 코드와 동일)
+    MULTIPLIER = 12, 
     Enabled = true,
     AimKey = Enum.KeyCode.P,
-    ToggleKey = Enum.KeyCode.Insert
+    ToggleKey = Enum.KeyCode.Insert,
+    TargetPart = "Head" -- [기본값] 에임봇이 타겟팅할 기본 파트
 }
 
 local UiVisible = true -- 초기 UI 상태 (켜짐)
@@ -28,7 +29,7 @@ FovCircle.Transparency = 0.5
 FovCircle.Visible = UiVisible
 
 ----------------------------------------------------------------                
--- 2. GUI 생성 (FOV 및 에임 강도 조절용 UI)
+-- 2. GUI 생성 (FOV, 에임 강도 및 조준 부위 조절 UI)
 ----------------------------------------------------------------
 local ScreenGui = Instance.new("ScreenGui")
 ScreenGui.Name = "AimSettingsUI"
@@ -36,12 +37,8 @@ pcall(function() ScreenGui.Parent = CoreGui end)
 if not ScreenGui.Parent then ScreenGui.Parent = LocalPlayer:WaitForChild("PlayerGui") end
 
 local Frame = Instance.new("Frame")
-Frame.Size = UDim2.new(0, 220, 0, 140)
-
--- [추가] UI의 중심점을 정중앙(0.5, 0.5)으로 설정합니다.
+Frame.Size = UDim2.new(0, 220, 0, 195) -- [수정] 조준 부위 추가로 인해 세로 높이 확장 (140 -> 195)
 Frame.AnchorPoint = Vector2.new(0.5, 0.5) 
-
--- [수정] 화면 전체 가로(X)의 50%, 세로(Y)의 50% 위치(즉, 정중앙)에 배치합니다.
 Frame.Position = UDim2.new(0.5, 0, 0.5, 0)
 Frame.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
 Frame.BorderSizePixel = 0
@@ -88,7 +85,7 @@ local function createSlider(text, min, max, default, posY, callback)
     sliderBtn.Size = UDim2.new(0, 16, 0, 16)
     sliderBtn.AnchorPoint = Vector2.new(0.5, 0.5)
     sliderBtn.Position = UDim2.new((default - min) / (max - min), 0, 0.5, 0)
-    sliderBtn.BackgroundColor3 = Color3.fromRGB(0, 150, 255)
+    sliderBtn.BackgroundColor3 = Color3.fromRGB(105, 12, 12) -- 버튼 색깔 통일
     sliderBtn.Text = ""
     sliderBtn.Parent = sliderBg
 
@@ -122,9 +119,48 @@ createSlider("FOV SIZE", 10, 300, Settings.FOV, 35, function(val)
     Settings.FOV = val
 end)
 
--- 2. [신규] MULTIPLIER 슬라이더 생성 (위치 Y: 85, 범위 1 ~ 20)
+-- 2. MULTIPLIER 슬라이더 생성 (위치 Y: 85)
 createSlider("AIMLOCK", 1, 20, Settings.MULTIPLIER, 85, function(val)
     Settings.MULTIPLIER = val
+end)
+
+-- 3. [신규] 에임 부위 선택용 버튼 생성 (위치 Y: 140)
+local PartLabel = Instance.new("TextLabel")
+PartLabel.Size = UDim2.new(1, -20, 0, 20)
+PartLabel.Position = UDim2.new(0, 10, 0, 140)
+PartLabel.Text = "AIM PART : " .. tostring(Settings.TargetPart)
+PartLabel.TextColor3 = Color3.fromRGB(105, 12, 12)
+PartLabel.BackgroundTransparency = 1
+PartLabel.TextXAlignment = Enum.TextXAlignment.Left
+PartLabel.Font = Enum.Font.SourceSans
+PartLabel.TextSize = 16
+PartLabel.Parent = Frame
+
+local ToggleButton = Instance.new("TextButton")
+ToggleButton.Size = UDim2.new(1, -20, 0, 25)
+ToggleButton.Position = UDim2.new(0, 10, 0, 162)
+ToggleButton.BackgroundColor3 = Color3.fromRGB(105, 12, 12) -- 어두운 레드 톤 배경
+ToggleButton.Text = "SWITCH TO BODY" -- 기본 상태에서 누르면 몸으로 바꾼다는 예고
+ToggleButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+ToggleButton.Font = Enum.Font.SourceSansBold
+ToggleButton.TextSize = 16
+ToggleButton.Parent = Frame
+
+local ButtonCorner = Instance.new("UICorner")
+ButtonCorner.CornerRadius = UDim.new(0, 5)
+ButtonCorner.Parent = ToggleButton
+
+-- 버튼 클릭 시 머리 <-> 몸통 전환 토글
+ToggleButton.MouseButton1Click:Connect(function()
+    if Settings.TargetPart == "Head" then
+        Settings.TargetPart = "Body"
+        PartLabel.Text = "AIM PART : BODY"
+        ToggleButton.Text = "SWITCH TO HEAD"
+    else
+        Settings.TargetPart = "Head"
+        PartLabel.Text = "AIM PART : HEAD"
+        ToggleButton.Text = "SWITCH TO BODY"
+    end
 end)
 
 ----------------------------------------------------------------                
@@ -139,7 +175,7 @@ UserInputService.InputBegan:Connect(function(input, gameProcessed)
 end)
 
 ----------------------------------------------------------------                
--- 4. 에임봇 로직
+-- 4. 에임봇 로직 (조준 파트 유동화 적용)
 ----------------------------------------------------------------
 local function getClosest()
     local target = nil
@@ -149,10 +185,18 @@ local function getClosest()
     for _, p in pairs(Players:GetPlayers()) do
         if p ~= LocalPlayer and p.Character then
             local hum = p.Character:FindFirstChildOfClass("Humanoid")
-            local head = p.Character:FindFirstChild("Head") or p.Character:FindFirstChild("UpperTorso")
             
-            if head and hum and hum.Health > 0 then
-                local pos, onScreen = Camera:WorldToViewportPoint(head.Position)
+            -- [핵심 수정] UI 세팅에 따라 타겟 파트를 동적으로 선택합니다.
+            local aimPart = nil
+            if Settings.TargetPart == "Head" then
+                aimPart = p.Character:FindFirstChild("Head")
+            else
+                -- BODY를 선택하면 R6 캐릭터와 R15 캐릭터의 몸통 파트를 유연하게 탐색합니다.
+                aimPart = p.Character:FindFirstChild("UpperTorso") or p.Character:FindFirstChild("Torso")
+            end
+            
+            if aimPart and hum and hum.Health > 0 then
+                local pos, onScreen = Camera:WorldToViewportPoint(aimPart.Position)
                 if onScreen then
                     local dist = (Vector2.new(pos.X, pos.Y) - mousePos).Magnitude
                     if dist < shortestDist then
@@ -175,7 +219,6 @@ RunService.RenderStepped:Connect(function()
     if UserInputService:IsKeyDown(Settings.AimKey) then
         local targetPos = getClosest()
         if targetPos then
-            -- 실시간으로 바뀐 Settings.MULTIPLIER 배수가 적용됩니다.
             local diffX = (targetPos.X - mousePos.X) * Settings.MULTIPLIER
             local diffY = (targetPos.Y - mousePos.Y) * Settings.MULTIPLIER
             
