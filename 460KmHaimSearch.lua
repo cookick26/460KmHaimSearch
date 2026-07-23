@@ -1,21 +1,22 @@
-local Players = game:GetService("Players")
-local UserInputService = game:GetService("UserInputService")
 local RunService = game:GetService("RunService")
+local PlayerService = game:GetService("Players")
+local UserInputService = game:GetService("UserInputService")
 local CoreGui = game:GetService("CoreGui")
 local Camera = workspace.CurrentCamera
-local LocalPlayer = Players.LocalPlayer
+local LocalPlayer = PlayerService.LocalPlayer
 
 -- 실시간 설정 변수
 local Settings = {
     FOV = 55,
-    MULTIPLIER = 12, 
+    MULTIPLIER = 12,
     Enabled = true,
+    ESPEnabled = true, -- [신규] ESP 켜기/끄기 설정
     AimKey = Enum.KeyCode.P,
     ToggleKey = Enum.KeyCode.Insert,
-    TargetPart = "Head" -- [기본값] 에임봇이 타겟팅할 기본 파트
+    TargetPart = "Head"
 }
 
-local UiVisible = true -- 초기 UI 상태 (켜짐)
+local UiVisible = true -- 초기 UI 상태
 
 ----------------------------------------------------------------                
 -- 1. FOV 시각화 원(Drawing) 설정
@@ -29,7 +30,7 @@ FovCircle.Transparency = 0.5
 FovCircle.Visible = UiVisible
 
 ----------------------------------------------------------------                
--- 2. GUI 생성 (FOV, 에임 강도 및 조준 부위 조절 UI)
+-- 2. GUI 생성 (Cookick Hub)
 ----------------------------------------------------------------
 local ScreenGui = Instance.new("ScreenGui")
 ScreenGui.Name = "AimSettingsUI"
@@ -37,7 +38,7 @@ pcall(function() ScreenGui.Parent = CoreGui end)
 if not ScreenGui.Parent then ScreenGui.Parent = LocalPlayer:WaitForChild("PlayerGui") end
 
 local Frame = Instance.new("Frame")
-Frame.Size = UDim2.new(0, 220, 0, 195) -- [수정] 조준 부위 추가로 인해 세로 높이 확장 (140 -> 195)
+Frame.Size = UDim2.new(0, 220, 0, 235) -- ESP 버튼 추가로 세로 크기 확장 (195 -> 235)
 Frame.AnchorPoint = Vector2.new(0.5, 0.5) 
 Frame.Position = UDim2.new(0.5, 0, 0.5, 0)
 Frame.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
@@ -58,7 +59,7 @@ Title.TextColor3 = Color3.fromRGB(105, 12, 12)
 Title.BackgroundTransparency = 1
 Title.TextXAlignment = Enum.TextXAlignment.Center
 Title.Font = Enum.Font.SourceSansBold
-Title.TextSize = 16
+Title.TextSize = 18
 Title.Parent = Frame
 
 -- 공통 슬라이더 생성 함수
@@ -85,7 +86,7 @@ local function createSlider(text, min, max, default, posY, callback)
     sliderBtn.Size = UDim2.new(0, 16, 0, 16)
     sliderBtn.AnchorPoint = Vector2.new(0.5, 0.5)
     sliderBtn.Position = UDim2.new((default - min) / (max - min), 0, 0.5, 0)
-    sliderBtn.BackgroundColor3 = Color3.fromRGB(105, 12, 12) -- 버튼 색깔 통일
+    sliderBtn.BackgroundColor3 = Color3.fromRGB(105, 12, 12)
     sliderBtn.Text = ""
     sliderBtn.Parent = sliderBg
 
@@ -114,20 +115,20 @@ local function createSlider(text, min, max, default, posY, callback)
     end)
 end
 
--- 1. FOV 슬라이더 생성 (위치 Y: 35)
+-- 1. FOV 슬라이더
 createSlider("FOV SIZE", 10, 300, Settings.FOV, 35, function(val)
     Settings.FOV = val
 end)
 
--- 2. MULTIPLIER 슬라이더 생성 (위치 Y: 85)
+-- 2. AIMLOCK 슬라이더
 createSlider("AIMLOCK POWER", 1, 20, Settings.MULTIPLIER, 85, function(val)
     Settings.MULTIPLIER = val
 end)
 
--- 3. [신규] 에임 부위 선택용 버튼 생성 (위치 Y: 140)
+-- 3. AIM PART 선택 버튼 (Y: 135)
 local PartLabel = Instance.new("TextLabel")
 PartLabel.Size = UDim2.new(1, -20, 0, 20)
-PartLabel.Position = UDim2.new(0, 10, 0, 140)
+PartLabel.Position = UDim2.new(0, 10, 0, 135)
 PartLabel.Text = "AIM PART : " .. tostring(Settings.TargetPart)
 PartLabel.TextColor3 = Color3.fromRGB(105, 12, 12)
 PartLabel.BackgroundTransparency = 1
@@ -137,20 +138,19 @@ PartLabel.TextSize = 16
 PartLabel.Parent = Frame
 
 local ToggleButton = Instance.new("TextButton")
-ToggleButton.Size = UDim2.new(1, -20, 0, 25)
-ToggleButton.Position = UDim2.new(0, 10, 0, 162)
-ToggleButton.BackgroundColor3 = Color3.fromRGB(105, 12, 12) -- 어두운 레드 톤 배경
-ToggleButton.Text = "SWITCH TO BODY" -- 기본 상태에서 누르면 몸으로 바꾼다는 예고
+ToggleButton.Size = UDim2.new(1, -20, 0, 22)
+ToggleButton.Position = UDim2.new(0, 10, 0, 157)
+ToggleButton.BackgroundColor3 = Color3.fromRGB(105, 12, 12)
+ToggleButton.Text = "SWITCH TO BODY"
 ToggleButton.TextColor3 = Color3.fromRGB(255, 255, 255)
 ToggleButton.Font = Enum.Font.SourceSansBold
-ToggleButton.TextSize = 16
+ToggleButton.TextSize = 13
 ToggleButton.Parent = Frame
 
 local ButtonCorner = Instance.new("UICorner")
 ButtonCorner.CornerRadius = UDim.new(0, 5)
 ButtonCorner.Parent = ToggleButton
 
--- 버튼 클릭 시 머리 <-> 몸통 전환 토글
 ToggleButton.MouseButton1Click:Connect(function()
     if Settings.TargetPart == "Head" then
         Settings.TargetPart = "Body"
@@ -163,8 +163,34 @@ ToggleButton.MouseButton1Click:Connect(function()
     end
 end)
 
+-- 4. [신규] ESP ON/OFF 토글 버튼 (Y: 188)
+local EspBtn = Instance.new("TextButton")
+EspBtn.Size = UDim2.new(1, -20, 0, 28)
+EspBtn.Position = UDim2.new(0, 10, 0, 192)
+EspBtn.BackgroundColor3 = Color3.fromRGB(105, 12, 12)
+EspBtn.Text = "ESP : ON"
+EspBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+EspBtn.Font = Enum.Font.SourceSansBold
+EspBtn.TextSize = 14
+EspBtn.Parent = Frame
+
+local EspCorner = Instance.new("UICorner")
+EspCorner.CornerRadius = UDim.new(0, 5)
+EspCorner.Parent = EspBtn
+
+EspBtn.MouseButton1Click:Connect(function()
+    Settings.ESPEnabled = not Settings.ESPEnabled
+    if Settings.ESPEnabled then
+        EspBtn.Text = "ESP : ON"
+        EspBtn.BackgroundColor3 = Color3.fromRGB(105, 12, 12)
+    else
+        EspBtn.Text = "ESP : OFF"
+        EspBtn.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
+    end
+end)
+
 ----------------------------------------------------------------                
--- 3. Insert 키 입력 감지 (UI & FOV 토글)
+-- 3. Insert 키 토글 (UI & FOV 원)
 ----------------------------------------------------------------
 UserInputService.InputBegan:Connect(function(input, gameProcessed)
     if not gameProcessed and input.KeyCode == Settings.ToggleKey then
@@ -175,23 +201,98 @@ UserInputService.InputBegan:Connect(function(input, gameProcessed)
 end)
 
 ----------------------------------------------------------------                
--- 4. 에임봇 로직 (조준 파트 유동화 적용)
+-- 4. ESP 로직 (통합)
+----------------------------------------------------------------
+local function ESP(player)
+    local DrawObject = {
+        Box = Drawing.new("Square"),
+        BoxOutline = Drawing.new("Square"),
+        Name = Drawing.new("Text")
+    }
+
+    RunService.RenderStepped:Connect(function()
+        local Character = player.Character
+
+        -- ESP 스위치가 ON 상태이고 대상 캐릭터가 존재할 때만 표시
+        if Settings.ESPEnabled and Character then
+            local HumanoidRootPart = Character:FindFirstChild("HumanoidRootPart")
+            local Humanoid = Character:FindFirstChildOfClass("Humanoid")
+            
+            if HumanoidRootPart and Humanoid and Humanoid.Health > 0 then
+                local Position, OnScreen = Camera:WorldToViewportPoint(HumanoidRootPart.Position)
+                if OnScreen then
+                    local scale = 1 / (Position.Z * math.tan(math.rad(Camera.FieldOfView * 0.5)) * 2) * 1000
+                    local width, height = math.floor(4.5 * scale), math.floor(6 * scale)
+                    local x, y = math.floor(Position.X), math.floor(Position.Y)
+                    local xPosition, yPosition = math.floor(x - width * 0.5), math.floor((y - height * 0.5) + (0.5 * scale))
+
+                    -- Box 설정
+                    DrawObject.Box.Size = Vector2.new(width, height)
+                    DrawObject.Box.Position = Vector2.new(xPosition, yPosition)
+                    DrawObject.Box.Visible = true
+                    DrawObject.Box.Color = Color3.fromRGB(255, 255, 255)
+                    DrawObject.Box.Thickness = 1
+
+                    -- Box Outline 설정
+                    DrawObject.BoxOutline.Size = Vector2.new(width, height)
+                    DrawObject.BoxOutline.Position = Vector2.new(xPosition, yPosition)
+                    DrawObject.BoxOutline.Visible = true
+                    DrawObject.BoxOutline.Color = Color3.fromRGB(0, 0, 0)
+                    DrawObject.BoxOutline.Thickness = 2
+                    DrawObject.BoxOutline.ZIndex = 1
+                    DrawObject.Box.ZIndex = 2
+
+                    -- Name 설정
+                    DrawObject.Name.Text = player.Name
+                    DrawObject.Name.Size = 14
+                    DrawObject.Name.Center = true
+                    DrawObject.Name.Outline = true
+                    DrawObject.Name.OutlineColor = Color3.fromRGB(0, 0, 0)
+                    DrawObject.Name.Color = Color3.fromRGB(255, 255, 255)
+                    DrawObject.Name.Position = Vector2.new(xPosition + (width / 2), yPosition - 16)
+                    DrawObject.Name.Visible = true
+                    DrawObject.Name.ZIndex = 3
+                    return
+                end
+            end
+        end
+
+        -- 조건을 만족하지 못하면 일괄 숨김
+        DrawObject.Box.Visible = false
+        DrawObject.BoxOutline.Visible = false
+        DrawObject.Name.Visible = false
+    end)
+end
+
+-- 서버의 모든 플레이어 및 새로 들어오는 유저에게 ESP 연동
+for _, v in pairs(PlayerService:GetPlayers()) do
+    if v ~= LocalPlayer then
+        ESP(v)
+    end
+end
+
+PlayerService.PlayerAdded:Connect(function(v)
+    if v ~= LocalPlayer then
+        ESP(v)
+    end
+end)
+
+----------------------------------------------------------------                
+-- 5. 에임봇 로직
 ----------------------------------------------------------------
 local function getClosest()
     local target = nil
     local shortestDist = Settings.FOV 
     local mousePos = UserInputService:GetMouseLocation()
 
-    for _, p in pairs(Players:GetPlayers()) do
+    for _, p in pairs(PlayerService:GetPlayers()) do
         if p ~= LocalPlayer and p.Character then
             local hum = p.Character:FindFirstChildOfClass("Humanoid")
             
-            -- [핵심 수정] UI 세팅에 따라 타겟 파트를 동적으로 선택합니다.
             local aimPart = nil
             if Settings.TargetPart == "Head" then
                 aimPart = p.Character:FindFirstChild("Head")
             else
-                -- BODY를 선택하면 R6 캐릭터와 R15 캐릭터의 몸통 파트를 유연하게 탐색합니다.
                 aimPart = p.Character:FindFirstChild("UpperTorso") or p.Character:FindFirstChild("Torso")
             end
             
