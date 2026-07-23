@@ -120,7 +120,7 @@ createSlider("FOV SIZE", 10, 300, Settings.FOV, 35, function(val)
 end)
 
 -- 2. MULTIPLIER 슬라이더 생성 (위치 Y: 85)
-createSlider("AIMLOCK", 1, 20, Settings.MULTIPLIER, 85, function(val)
+createSlider("AIMLOCK POWER", 1, 20, Settings.MULTIPLIER, 85, function(val)
     Settings.MULTIPLIER = val
 end)
 
